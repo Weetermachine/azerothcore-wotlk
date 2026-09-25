@@ -918,6 +918,7 @@ public:
     void HandlePlayerResurrect(Player* player) override;
 
     uint32 GetNodeState(uint8 nodeType) const { return (uint8)nodePoint[nodeType].nodeState; }
+    [[nodiscard]] uint32 GetTeamReinforcements(TeamId teamId) const { return factionReinforcements[teamId]; }
 
     bool AllNodesConrolledByTeam(TeamId teamId) const override;  // overwrited
     bool IsResourceGlutAllowed(TeamId teamId) const;
