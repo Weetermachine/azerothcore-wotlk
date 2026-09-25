@@ -64,7 +64,7 @@ ARG CCACHE_LOGFILE=""
 
 RUN apt-get update                                                     \
     && apt-get install -y --no-install-recommends                         \
-        build-essential ccache libtool cmake-data ninja-build cmake clang    \
+        build-essential ccache libtool cmake-data ninja-build cmake clang lld \
         git lsb-base curl unzip default-mysql-client openssl                  \
         default-libmysqlclient-dev libboost-all-dev libssl-dev libmysql++-dev \
         libreadline-dev zlib1g-dev libbz2-dev libncurses5-dev liblzma-dev  \
@@ -80,7 +80,10 @@ ARG CACHEBUST=1
 
 WORKDIR /azerothcore/build
 
+# The build dir is a cache mount too, so ninja only rebuilds what changed (the images only take
+# /azerothcore/env/dist from this stage).
 RUN --mount=type=cache,target=/ccache,sharing=locked \
+    --mount=type=cache,target=/azerothcore/build,sharing=locked \
     # This may seem silly (and it is), but AzerothCore wants the git repo at
     # build time. The git repo is _huge_ and it's not something that really
     # makes sense to mount into the container, but this way we can let the build
@@ -102,6 +105,8 @@ RUN --mount=type=cache,target=/ccache,sharing=locked \
        -DCMAKE_CXX_COMPILER_LAUNCHER="ccache"          \
        -DCMAKE_C_COMPILER_LAUNCHER="ccache"            \
        -DBoost_USE_STATIC_LIBS="ON"                    \
+       -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=lld"         \
+       -DCMAKE_SHARED_LINKER_FLAGS="-fuse-ld=lld"      \
     && cmake --build . --config "$CTYPE" -j $(($(nproc) + 1)) \
     && cmake --install . --config "$CTYPE"
 
