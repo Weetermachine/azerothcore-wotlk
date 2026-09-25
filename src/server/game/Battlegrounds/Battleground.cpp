@@ -16,6 +16,8 @@
  */
 
 #include "Battleground.h"
+#include <atomic>
+#include <mutex>
 #include "ArenaSpectator.h"
 #include "ArenaTeam.h"
 #include "BattlegroundMgr.h"
@@ -849,14 +851,18 @@ void Battleground::EndBattleground(PvPTeamId winnerTeamId)
     uint64 battlegroundId = 1;
     if (isBattleground() && sWorld->getBoolConfig(CONFIG_BATTLEGROUND_STORE_STATISTICS_ENABLE))
     {
-        stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_PVPSTATS_MAXID);
-        PreparedQueryResult result = CharacterDatabase.Query(stmt);
-
-        if (result)
+        // Battlegrounds end on map update threads, so MAX(id) + 1 per game raced: two games ending
+        // together got the same id (duplicate-key insert, and both rosters under one id). Read
+        // MAX(id) once and hand out ids from an atomic counter.
+        static std::once_flag statsIdInit;
+        static std::atomic<uint64> nextStatsId{1};
+        std::call_once(statsIdInit, []()
         {
-            Field* fields = result->Fetch();
-            battlegroundId = fields[0].Get<uint64>() + 1;
-        }
+            CharacterDatabasePreparedStatement* maxStmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_PVPSTATS_MAXID);
+            if (PreparedQueryResult result = CharacterDatabase.Query(maxStmt))
+                nextStatsId.store(result->Fetch()[0].Get<uint64>() + 1);
+        });
+        battlegroundId = nextStatsId.fetch_add(1);
 
         stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_PVPSTATS_BATTLEGROUND);
         stmt->SetData(0, battlegroundId);
